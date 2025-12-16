@@ -40,6 +40,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install docker==6.1.3
           echo "✅ Dependencies installed"
       
       # Step 4: Setup MLflow tracking
@@ -113,12 +114,12 @@ jobs:
           echo "📦 Run ID: ${{ steps.get_run_id.outputs.run_id }}"
           
           export MLFLOW_TRACKING_URI="file://$(pwd)/mlruns"
+          export DOCKER_HOST="unix:///var/run/docker.sock"
           
           # Build using MLflow's build-docker command
           mlflow models build-docker \
             -m "runs:/${{ steps.get_run_id.outputs.run_id }}/model" \
-            -n "${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification" \
-            --enable-mlserver
+            -n "${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification"
           
           # Tag with commit SHA
           docker tag \
