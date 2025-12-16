@@ -1,0 +1,10 @@
+Docker Hub Image Repository
+Link: https://hub.docker.com/r/USERNAME/diabetes-classification
+
+Image Details:
+- Repository: muhammadmuttakin/diabetes-classification
+- Latest Tag: latest
+- Full Image: muhammadmuttakin/diabetes-classification:latest
+
+GitHub CI/CD: https://github.com/muhammadmuttakin/Workflow-CI
+MLflow Project: Diabetes Classification

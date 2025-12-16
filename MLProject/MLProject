@@ -1,0 +1,27 @@
+name: Diabetes-Classification
+
+conda_env: conda.yaml
+
+entry_points:
+  main:
+    command: python modelling.py
+    parameters:
+      data_path:
+        description: "Path to preprocessed diabetes dataset"
+        type: string
+        default: "diabetes_preprocessing.csv"
+      
+      model_type:
+        description: "Type of model (RandomForest)"
+        type: string
+        default: "RandomForest"
+      
+      test_size:
+        description: "Test set size (0.0-1.0)"
+        type: float
+        default: 0.2
+      
+      random_state:
+        description: "Random state for reproducibility"
+        type: int
+        default: 42

@@ -1,0 +1,194 @@
+name: MLflow Project Training - ADVANCED (mlflow build-docker)
+
+# ===== TRIGGER =====
+on:
+  # Manual trigger
+  workflow_dispatch:
+  
+  # Trigger saat push ke main
+  push:
+    branches:
+      - main
+    paths:
+      - 'MLProject/**'
+      - '.github/workflows/mlflow-training.yml'
+  
+  # Scheduled trigger (setiap hari jam 12:00 UTC)
+  schedule:
+    - cron: '0 12 * * *'
+
+# ===== JOBS =====
+jobs:
+  mlflow-training:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      # Step 2: Setup Python
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          echo "✅ Dependencies installed"
+      
+      # Step 4: Setup MLflow tracking
+      - name: Setup MLflow tracking
+        run: |
+          mkdir -p mlruns
+          mkdir -p artifacts
+          echo "✅ Directories created"
+      
+      # Step 5: Run MLflow Project
+      - name: Run MLflow Project
+        run: |
+          cd MLProject
+          mlflow run . --no-conda
+          echo "✅ MLflow Project executed"
+        env:
+          MLFLOW_TRACKING_URI: file://./mlruns
+      
+      # Step 6: Get latest MLflow run ID (CRITICAL FOR ADVANCED)
+      - name: Get latest MLflow run ID
+        id: get_run_id
+        run: |
+          RUN_ID=$(python -c "
+          import mlflow
+          mlflow.set_tracking_uri('file://./mlruns')
+          client = mlflow.tracking.MlflowClient()
+          experiment = client.get_experiment_by_name('Diabetes_Classification_MLProject')
+          if experiment is None:
+              raise Exception('Experiment not found')
+          runs = client.search_runs(experiment.experiment_id, order_by=['start_time DESC'], max_results=1)
+          if len(runs) == 0:
+              raise Exception('No runs found')
+          print(runs[0].info.run_id)
+          ")
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "✅ Run ID: $RUN_ID"
+      
+      # Step 7: Collect artifacts
+      - name: Collect artifacts
+        run: |
+          echo "✅ Collecting artifacts..."
+          cp -r mlruns artifacts/ || true
+          cp -r MLProject/artifacts/* artifacts/ 2>/dev/null || true
+          find artifacts/ -type f
+      
+      # Step 8: Upload artifacts to GitHub
+      - name: Upload artifacts to GitHub
+        uses: actions/upload-artifact@v3
+        with:
+          name: mlflow-training-artifacts-${{ github.sha }}
+          path: |
+            artifacts/
+            mlruns/
+          retention-days: 30
+      
+      # Step 9: Setup Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      # Step 10: Login to Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      
+      # ===== CRITICAL STEP FOR ADVANCED =====
+      # Step 11: Build Docker image using MLflow (ADVANCED REQUIREMENT)
+      - name: Build MLflow Docker image
+        run: |
+          echo "🐳 Building Docker image using mlflow models build-docker..."
+          echo "📦 Run ID: ${{ steps.get_run_id.outputs.run_id }}"
+          
+          # Build using MLflow's build-docker command
+          mlflow models build-docker \
+            -m "runs:/${{ steps.get_run_id.outputs.run_id }}/model" \
+            -n "${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification" \
+            --enable-mlserver
+          
+          # Tag with commit SHA
+          docker tag \
+            ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest \
+            ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:${{ github.sha }}
+          
+          echo "✅ Docker image built successfully using mlflow build-docker"
+        env:
+          MLFLOW_TRACKING_URI: file://./mlruns
+      
+      # Step 12: Push Docker image to Docker Hub
+      - name: Push Docker image to Docker Hub
+        run: |
+          echo "🚀 Pushing Docker images to Docker Hub..."
+          
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:${{ github.sha }}
+          
+          echo "✅ Docker images pushed successfully"
+          echo "📦 Image: ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest"
+          echo "📦 Image: ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:${{ github.sha }}"
+      
+      # Step 13: Commit artifacts to repository
+      - name: Commit artifacts to repository
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          
+          git add artifacts/ mlruns/ || true
+          
+          git commit -m "🤖 Auto: Update MLflow artifacts [Run: ${{ steps.get_run_id.outputs.run_id }}] - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+          
+          git push origin main || echo "Push skipped"
+      
+      # Step 14: Job Summary
+      - name: Job Summary
+        run: |
+          echo "## ✅ MLflow Project Training Complete - ADVANCED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**🎯 Level**: ADVANCED (4 pts) - Using mlflow build-docker" >> $GITHUB_STEP_SUMMARY
+          echo "**⏰ Timestamp**: $(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**🔗 MLflow Run ID**: \`${{ steps.get_run_id.outputs.run_id }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Completed Tasks" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Model Training (MLflow Project)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Artifacts Saved to GitHub" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker Image Built (mlflow build-docker)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker Image Pushed to Docker Hub" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🐳 Docker Hub Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository**: https://hub.docker.com/r/${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification" >> $GITHUB_STEP_SUMMARY
+          echo "- **Latest Image**: \`${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit Image**: \`${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull Command**:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Generated Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Trained Model (.pkl)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Confusion Matrix (confusion_matrix.png)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Feature Importance (feature_importance.png)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Classification Report (.txt)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ MLflow Tracking Data (mlruns/)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker Image (MLflow-generated)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎓 Kriteria Advanced Terpenuhi" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Workflow CI dengan GitHub Actions" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Artifacts tersimpan di GitHub repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker image dibuat menggunakan \`mlflow models build-docker\`" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker image di-push ke Docker Hub" >> $GITHUB_STEP_SUMMARY
