@@ -49,13 +49,13 @@ jobs:
           mkdir -p artifacts
           echo "✅ Directories created"
       
-      # Step 5: Run MLflow Project
-      - name: Run MLflow Project
+      # Step 5: Run MLflow Project (Direct Python Execution)
+      - name: Run MLflow training
         run: |
           cd MLProject
           export MLFLOW_TRACKING_URI="file://$(pwd)/../mlruns"
-          mlflow run . --env-manager=local
-          echo "✅ MLflow Project executed"
+          python modelling.py
+          echo "✅ MLflow training executed"
       
       # Step 6: Get latest MLflow run ID (CRITICAL FOR ADVANCED)
       - name: Get latest MLflow run ID
