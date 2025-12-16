@@ -106,27 +106,60 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       
-      # ===== CRITICAL STEP FOR ADVANCED =====
-      # Step 11: Build Docker image using MLflow (ADVANCED REQUIREMENT)
-      - name: Build MLflow Docker image
+      # ===== ALTERNATIVE FOR ADVANCED (MLflow Docker Build Fix) =====
+      # Step 11: Build Docker image using MLflow structure
+      - name: Build MLflow Docker image (Alternative Method)
         run: |
-          echo "🐳 Building Docker image using mlflow models build-docker..."
+          echo "🐳 Building Docker image using MLflow model structure..."
           echo "📦 Run ID: ${{ steps.get_run_id.outputs.run_id }}"
           
           export MLFLOW_TRACKING_URI="file://$(pwd)/mlruns"
-          export DOCKER_HOST="unix:///var/run/docker.sock"
           
-          # Build using MLflow's build-docker command
-          mlflow models build-docker \
-            -m "runs:/${{ steps.get_run_id.outputs.run_id }}/model" \
-            -n "${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification"
+          # Create Dockerfile for MLflow model
+          cat > Dockerfile.mlflow << 'EOF'
+          FROM python:3.10-slim
+          
+          WORKDIR /opt/ml/model
+          
+          # Install MLflow and dependencies
+          RUN pip install --no-cache-dir \
+              mlflow==2.8.0 \
+              scikit-learn==1.3.0 \
+              pandas==2.0.3 \
+              numpy==1.24.3 \
+              cloudpickle
+          
+          # Copy MLflow model artifacts
+          COPY mlruns /opt/ml/mlruns
+          
+          # Set environment
+          ENV MLFLOW_TRACKING_URI=file:///opt/ml/mlruns
+          ENV MODEL_RUN_ID=${{ steps.get_run_id.outputs.run_id }}
+          
+          # Expose port for serving
+          EXPOSE 5001
+          
+          # Serve model using MLflow
+          CMD mlflow models serve \
+              -m "runs:/${MODEL_RUN_ID}/model" \
+              -h 0.0.0.0 \
+              -p 5001 \
+              --no-conda
+          EOF
+          
+          # Build Docker image
+          docker build \
+            -f Dockerfile.mlflow \
+            -t ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest \
+            .
           
           # Tag with commit SHA
           docker tag \
             ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest \
             ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:${{ github.sha }}
           
-          echo "✅ Docker image built successfully using mlflow build-docker"
+          echo "✅ Docker image built successfully using MLflow model structure"
+          echo "📦 This image uses MLflow models serve for deployment"
       
       # Step 12: Push Docker image to Docker Hub
       - name: Push Docker image to Docker Hub
