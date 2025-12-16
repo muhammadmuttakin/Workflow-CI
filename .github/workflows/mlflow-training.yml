@@ -53,18 +53,17 @@ jobs:
       - name: Run MLflow Project
         run: |
           cd MLProject
+          export MLFLOW_TRACKING_URI="file://$(pwd)/../mlruns"
           mlflow run . --env-manager=local
           echo "✅ MLflow Project executed"
-        env:
-          MLFLOW_TRACKING_URI: file://./mlruns
       
       # Step 6: Get latest MLflow run ID (CRITICAL FOR ADVANCED)
       - name: Get latest MLflow run ID
         id: get_run_id
         run: |
+          export MLFLOW_TRACKING_URI="file://$(pwd)/mlruns"
           RUN_ID=$(python -c "
           import mlflow
-          mlflow.set_tracking_uri('file://./mlruns')
           client = mlflow.tracking.MlflowClient()
           experiment = client.get_experiment_by_name('Diabetes_Classification_MLProject')
           if experiment is None:
@@ -113,6 +112,8 @@ jobs:
           echo "🐳 Building Docker image using mlflow models build-docker..."
           echo "📦 Run ID: ${{ steps.get_run_id.outputs.run_id }}"
           
+          export MLFLOW_TRACKING_URI="file://$(pwd)/mlruns"
+          
           # Build using MLflow's build-docker command
           mlflow models build-docker \
             -m "runs:/${{ steps.get_run_id.outputs.run_id }}/model" \
@@ -125,8 +126,6 @@ jobs:
             ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:${{ github.sha }}
           
           echo "✅ Docker image built successfully using mlflow build-docker"
-        env:
-          MLFLOW_TRACKING_URI: file://./mlruns
       
       # Step 12: Push Docker image to Docker Hub
       - name: Push Docker image to Docker Hub
