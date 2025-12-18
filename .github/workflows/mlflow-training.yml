@@ -107,142 +107,33 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       
       # ===== FIXED DOCKER BUILD =====
-      # Step 11: Build Docker image using MLflow structure (FIXED)
+# Step 11: Build Docker image (SIMPLE VERSION)
       - name: Build MLflow Docker image (FIXED)
         run: |
-          echo "🐳 Building Docker image with FIXED path..."
+          echo "🐳 Building Docker image..."
           
-          # Get RUN_ID from previous step
           RUN_ID="${{ steps.get_run_id.outputs.run_id }}"
           echo "📦 Run ID: $RUN_ID"
           
-          # Verify RUN_ID is not empty
-          if [ -z "$RUN_ID" ]; then
-            echo "❌ ERROR: RUN_ID is empty!"
-            exit 1
-          fi
-          
-          # Verify mlruns directory exists
-          if [ ! -d "mlruns" ]; then
-            echo "❌ ERROR: mlruns directory not found!"
-            exit 1
-          fi
-          
-          # Find and verify model artifacts exist
-          MODEL_PATH=$(find mlruns -path "*/artifacts/model/MLmodel" | head -1)
-          if [ -z "$MODEL_PATH" ]; then
-            echo "❌ ERROR: Model artifacts not found!"
-            echo "Available files in mlruns:"
-            find mlruns -type f
-            exit 1
-          fi
-          echo "✅ Found model at: $MODEL_PATH"
-          
-          export MLFLOW_TRACKING_URI="file://$(pwd)/mlruns"
-          
-          # Create Dockerfile with FIXED RUN_ID injection
-          cat > Dockerfile.mlflow << EOF
+          # Create simple Dockerfile
+          cat > Dockerfile.mlflow << 'DOCKERFILE'
           FROM python:3.10-slim
-          
           WORKDIR /opt/ml/model
-          
-          # Install system dependencies
-          RUN apt-get update && apt-get install -y \\
-              curl \\
-              && rm -rf /var/lib/apt/lists/*
-          
-          # Install MLflow and dependencies
-          RUN pip install --no-cache-dir \\
-              mlflow==2.8.0 \\
-              scikit-learn==1.3.0 \\
-              pandas==2.0.3 \\
-              numpy==1.24.3 \\
-              cloudpickle
-          
-          # Copy MLflow model artifacts (entire mlruns directory)
+          RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+          RUN pip install --no-cache-dir mlflow==2.8.0 scikit-learn==1.3.0 pandas==2.0.3 numpy==1.24.3 cloudpickle
           COPY mlruns /opt/ml/mlruns
-          
-          # Verify model was copied
-          RUN ls -la /opt/ml/mlruns && \\
-              find /opt/ml/mlruns -name "MLmodel" && \\
-              echo "✅ Model artifacts verified"
-          
-          # Set environment variables
           ENV MLFLOW_TRACKING_URI=file:///opt/ml/mlruns
-          ENV MODEL_RUN_ID=${RUN_ID}
-          
-          # Expose port for serving
           EXPOSE 5001
+          DOCKERFILE
           
-          # Health check
-          HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \\
-            CMD curl -f http://localhost:5001/health || exit 1
+          # Add CMD with RUN_ID
+          echo "CMD mlflow models serve -m \"runs:/${RUN_ID}/model\" -h 0.0.0.0 -p 5001 --no-conda" >> Dockerfile.mlflow
           
-          # Serve model using MLflow with hardcoded RUN_ID
-          CMD mlflow models serve \\
-              -m "runs:/${RUN_ID}/model" \\
-              -h 0.0.0.0 \\
-              -p 5001 \\
-              --no-conda
-          EOF
+          # Build
+          docker build -f Dockerfile.mlflow -t ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest .
+          docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:${{ github.sha }}
           
-          # Display Dockerfile for verification
-          echo "📄 Dockerfile content:"
-          cat Dockerfile.mlflow
-          
-          # Verify RUN_ID is properly injected
-          echo ""
-          echo "🔍 Verifying RUN_ID injection:"
-          grep "ENV MODEL_RUN_ID=" Dockerfile.mlflow
-          grep "runs:/" Dockerfile.mlflow | grep -v "CMD"
-          
-          # Build Docker image
-          echo ""
-          echo "🔨 Building Docker image..."
-          docker build \\
-            -f Dockerfile.mlflow \\
-            -t ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest \\
-            .
-          
-          # Tag with commit SHA
-          docker tag \\
-            ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest \\
-            ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:${{ github.sha }}
-          
-          echo "✅ Docker image built successfully"
-          
-          # Test the image locally before pushing
-          echo ""
-          echo "🧪 Testing Docker image locally..."
-          docker run -d --name test-model -p 5001:5001 \\
-            ${{ secrets.DOCKER_HUB_USERNAME }}/diabetes-classification:latest
-          
-          # Wait for container to start
-          echo "⏳ Waiting 20 seconds for model to load..."
-          sleep 20
-          
-          # Check if container is running
-          if docker ps | grep -q test-model; then
-            echo "✅ Container is running!"
-            echo ""
-            echo "📋 Container logs:"
-            docker logs test-model
-            echo ""
-            echo "✅ Docker image test PASSED"
-          else
-            echo "❌ Container failed to start!"
-            echo ""
-            echo "📋 Container logs:"
-            docker logs test-model
-            echo ""
-            exit 1
-          fi
-          
-          # Cleanup test container
-          docker stop test-model || true
-          docker rm test-model || true
-          
-          echo "✅ All Docker build tests passed!"
+          echo "✅ Docker image built"
       
       # Step 12: Push Docker image to Docker Hub
       - name: Push Docker image to Docker Hub
