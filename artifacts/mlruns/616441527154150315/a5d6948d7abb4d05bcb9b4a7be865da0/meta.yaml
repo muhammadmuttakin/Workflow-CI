@@ -1,0 +1,15 @@
+artifact_uri: file:///home/runner/work/Workflow-CI/Workflow-CI/MLProject/../mlruns/616441527154150315/a5d6948d7abb4d05bcb9b4a7be865da0/artifacts
+end_time: 1767961145212
+entry_point_name: ''
+experiment_id: '616441527154150315'
+lifecycle_stage: active
+run_id: a5d6948d7abb4d05bcb9b4a7be865da0
+run_name: MLProject_Training
+run_uuid: a5d6948d7abb4d05bcb9b4a7be865da0
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1767961142168
+status: 3
+tags: []
+user_id: runner
